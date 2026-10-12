@@ -41,6 +41,7 @@ Anyone can call `credit` with their own IMD. That is just staking for someone, a
 | No answer (refused or split panel) | Intake, through `onOracleFailure` | The open question is cleared (`AskCleared`) and a challenger's bond goes back. Nothing is listed or delisted. |
 | `expire(project)` | anyone | Clears an open question after a day, or at once if the Intake completed it without a settled answer (for example a callback that ran out of gas). A challenger's bond goes back. |
 | `setBeneficiary(project, wallet)` | the current beneficiary | Hands a listed project's points to another wallet. Refused while a question is open, and at most one handoff per day (`HANDOFF_INTERVAL`), so a beneficiary can't refuse every challenge by moving the wallet ahead of each one; after any handoff, challenges must use `challengeForBeneficiary`. |
+| `claimBond(to)` | whoever is owed a bond | Takes the bonds the oracle asset refused to pay them at settlement (`bondOwed`), sent to `to`, which may be another wallet. Settling, failing or expiring a question never waits on paying a bond: if the token refuses the transfer (a wallet it blocks, a `false` return), the bond is recorded as owed (`BondOwed`) and the question still closes, so a refusing token can't hold a project's question open for good (a Sepolia test run 3 audit finding). |
 
 ### What the panel is asked
 
@@ -67,7 +68,7 @@ A challenge asks whether the listed project still meets all of them, with the ch
 It does not pin the question's hash. Like PLEA's gate, it relies on the Intake pairing each answer with the right request, which is what IMD's docs recommend for a contract that asks on its own chain. Pinning the hash would mean rebuilding IMD's canonical JSON on chain, with a high cost if it is wrong by one byte.
 
 ### Money it holds
-Only the bonds of open challenges, never anything else, and never an approval left to the Intake (each ask approves exactly the fee, which the Intake takes at once). A failure or an expiry returns a bond to the challenger who paid it. That is the only value an unsigned failure moves, and it gives the Intake's writer no power it doesn't already have: withholding an answer leads to the same refund through `expire`.
+Only the bonds of open challenges and the bonds owed to wallets the token refused to pay (`bondOwed`, until claimed), never anything else, and never an approval left to the Intake (each ask approves exactly the fee, which the Intake takes at once). A failure or an expiry returns a bond to the challenger who paid it. That is the only value an unsigned failure moves, and it gives the Intake's writer no power it doesn't already have: withholding an answer leads to the same refund through `expire`.
 
 ### Settings
 
