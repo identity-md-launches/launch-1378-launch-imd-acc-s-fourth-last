@@ -113,7 +113,8 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
     /// real chain.
     uint256 public immutable questionChainId;
     /// @notice A challenger's deposit: paid to the project's beneficiary when the project stays
-    /// listed, returned to the challenger when it is delisted or no answer comes.
+    /// listed, returned to the challenger when it is delisted or no answer comes (or recorded in
+    /// `bondOwed` if the oracle asset refuses that transfer).
     uint256 public immutable challengeBond;
     /// @notice How long a project can't be challenged after it is listed. Defending a challenge
     /// does not restart this period, including when the challenger is the beneficiary's other wallet.
@@ -128,6 +129,11 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
     /// @notice No beneficiary handoff for the project before this time (`HANDOFF_INTERVAL` after
     /// the last one). Setting the same wallet again is not a handoff and does not start it.
     mapping(address => uint64) public handoffOpenAt;
+    /// @notice Challenge bonds the oracle asset refused to pay out when a question settled or was
+    /// cleared (for example a wallet the token blocks), by recipient. Settling never waits on that
+    /// transfer, so a refusing token can't hold a project's question open; the recipient takes the
+    /// bond later with `claimBond`, to any wallet.
+    mapping(address => uint256) public bondOwed;
 
     event Applied(
         address indexed project,
@@ -156,6 +162,9 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
         address indexed project, bytes32 indexed intakeId, Ask ask, uint8 status, bytes32 reason
     );
     event BeneficiarySet(address indexed project, address beneficiary);
+    /// @notice The oracle asset refused to pay `amount` of bond to `recipient`; it is owed instead.
+    event BondOwed(address indexed recipient, uint256 amount);
+    event BondClaimed(address indexed recipient, address indexed to, uint256 amount);
 
     error ZeroAddress();
     error NotAContract();
@@ -178,6 +187,7 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
     error BeneficiaryPinRequired();
     error HandoffTooSoon(uint64 openAt);
     error CooldownOutOfRange();
+    error NothingOwed();
 
     /// @dev Makes no external call, so the launch's empty-chain rehearsal can deploy it.
     constructor(
@@ -369,12 +379,12 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
         } else if (yes) {
             // The bond still goes to the beneficiary. Do not let a beneficiary (or its other
             // wallets) buy a fresh period of immunity by repeatedly defending its own challenge.
-            if (challengeBond != 0) oracleAsset.safeTransfer(p.beneficiary, challengeBond);
+            _payBond(p.beneficiary);
             emit Defended(project, challengeBond, a.requestId);
         } else {
             p.listed = false;
             p.toBlock = uint64(block.number);
-            if (challengeBond != 0) oracleAsset.safeTransfer(asker, challengeBond);
+            _payBond(asker);
             emit Delisted(project, uint64(block.number), a.requestId);
         }
     }
@@ -420,10 +430,45 @@ contract ProjectRegistry is OracleAttestationConsumer, ReentrancyGuard {
         Ask ask = p.ask;
         address asker = p.asker;
         _close(p, intakeId);
-        if (ask == Ask.Challenge && challengeBond != 0) {
-            oracleAsset.safeTransfer(asker, challengeBond);
-        }
+        if (ask == Ask.Challenge) _payBond(asker);
         emit AskCleared(project, intakeId, ask, status, reason);
+    }
+
+    /// @dev Pays one challenge bond to `to`, or records it as owed if the oracle asset refuses the
+    /// transfer, so settling or clearing a question never depends on that transfer.
+    function _payBond(address to) internal {
+        uint256 bond = challengeBond;
+        if (bond == 0) return;
+        if (!_tryTransfer(to, bond)) {
+            bondOwed[to] += bond;
+            emit BondOwed(to, bond);
+        }
+    }
+
+    /// @dev `transfer` that reports a revert or a false return instead of bubbling it up. Same
+    /// checks as OpenZeppelin's SafeERC20 (no return data is accepted only from a contract).
+    function _tryTransfer(address to, uint256 amount) internal returns (bool ok) {
+        address token = address(oracleAsset);
+        bytes memory data = abi.encodeCall(IERC20.transfer, (to, amount));
+        uint256 returnSize;
+        uint256 returnValue;
+        assembly ("memory-safe") {
+            ok := call(gas(), token, 0, add(data, 0x20), mload(data), 0, 0x20)
+            returnSize := returndatasize()
+            returnValue := mload(0)
+        }
+        ok = ok && (returnSize == 0 ? token.code.length > 0 : returnValue == 1);
+    }
+
+    /// @notice Take the bonds owed to you (see `bondOwed`), sent to `to`: your own wallet, or
+    /// another one if the token refuses to pay yours.
+    function claimBond(address to) external nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+        uint256 amount = bondOwed[msg.sender];
+        if (amount == 0) revert NothingOwed();
+        bondOwed[msg.sender] = 0;
+        oracleAsset.safeTransfer(to, amount);
+        emit BondClaimed(msg.sender, to, amount);
     }
 
     function _close(Project storage p, bytes32 intakeId) internal {

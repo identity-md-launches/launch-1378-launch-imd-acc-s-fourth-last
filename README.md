@@ -94,6 +94,16 @@ Same TestIMD and TestSIMD as above. Code: [launch-1294 repository](https://githu
 
 Test site: https://imd-acc-sepolia-test-run-2.sites.imd.fun/, one page each for Home (`#/`), Your stack (`#/stack`), Projects (`#/projects`, and `#/projects/<address>` per project), Apply (`#/apply`), Leaderboard (`#/leaderboard`) and Docs (`#/docs/<section>`), plus agent text at [`/llms.txt`](https://imd-acc-sepolia-test-run-2.sites.imd.fun/llms.txt). Built by jobs [`6`](jobs/6-sepolia-v2-site.md) and [`7`](jobs/7-sepolia-v2-site-pages.md); checked in a browser on every page ([history, section 16](docs/history.md#16-test-run-2-site-v2-live-and-checked-2026-10-11)).
 
+### Sepolia test run 3 (live, launch #1371, block 11,897,213)
+
+The registry `main` will use on mainnet (panel rules version 2, one beneficiary handoff per day), with Sepolia settings, wired to test run 2's Stacker above, which was not redeployed. Code: [launch-1371 repository](https://github.com/identity-md-launches/launch-1371-launch-imd-acc-s-third-last), commit `e6a9e072`; its `src/` is byte for byte `main`'s ([history, section 24](docs/history.md#24-sepolia-test-run-3-live-launch-1371-2026-10-12)).
+
+| Contract | Address | Notes |
+|---|---|---|
+| ProjectRegistry | [`0x9b466d1527322435dc7fdd97bc862b49c177fc2d`](https://sepolia.etherscan.io/address/0x9b466d1527322435dc7fdd97bc862b49c177fc2d) | Stacker `0x0457…314d`, fee `ORACLE_FEE()` 0.5 test IMD of `0x44a1…f89a` (read live from Intake v2), challenge bond 5 test IMD, cooldown 1 hour, panel 15/11, 1-day expiry, beneficiary handoff at most once per day. Challenges use `challengeForBeneficiary(project, reason, expectedBeneficiary)`. |
+
+The test run 2 site still reads test run 2's registry.
+
 ### Ethereum mainnet (next)
 
 | Contract | Address | Notes |
@@ -221,7 +231,7 @@ With [Foundry](https://getfoundry.sh) 1.8.3, the version IMD's verifier runs:
 
 ```
 forge build
-forge test                                                        # 172 tests; the 8 fork tests skip
+forge test                                                        # 180 tests; the 8 fork tests skip
 ETH_RPC_URL=https://ethereum-rpc.publicnode.com forge test --mc MainnetFork            # live IMD and sIMD
 SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com forge test --mc SepoliaFork # live TestIMD and TestSIMD; RegistrySepoliaFork: the real Intake v2
 forge fmt --check src test
