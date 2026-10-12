@@ -104,6 +104,14 @@ The registry `main` will use on mainnet (panel rules version 2, one beneficiary 
 
 The test run 2 site still reads test run 2's registry.
 
+### Sepolia test run 4 (launching, the last before mainnet)
+
+Test run 3's registry plus the fix for that launch's judged low: a bond the oracle asset refuses to pay no longer holds a question open (it is recorded in `bondOwed` and taken later with `claimBond(to)`). Deployed alone from the `launch-sepolia` branch, wired to test run 2's Stacker above, which is not redeployed. This is the code the mainnet registry will use, with Sepolia settings. Changes for the launch: [`ADAPTATION.md`](ADAPTATION.md).
+
+| Contract | Address | Notes |
+|---|---|---|
+| ProjectRegistry | to be filled in once live | Stacker `0x0457…314d`, fee `ORACLE_FEE()` 0.5 test IMD of `0x44a1…f89a` (read live from Intake v2), challenge bond 5 test IMD, cooldown 1 hour, panel 15/11, 1-day expiry, beneficiary handoff at most once per day, owed bonds via `bondOwed` / `claimBond(to)`. Challenges use `challengeForBeneficiary(project, reason, expectedBeneficiary)`. |
+
 ### Ethereum mainnet (next)
 
 | Contract | Address | Notes |
@@ -231,7 +239,7 @@ With [Foundry](https://getfoundry.sh) 1.8.3, the version IMD's verifier runs:
 
 ```
 forge build
-forge test                                                        # 180 tests; the 8 fork tests skip
+forge test                                                        # 182 tests; the 8 fork tests skip
 ETH_RPC_URL=https://ethereum-rpc.publicnode.com forge test --mc MainnetFork            # live IMD and sIMD
 SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com forge test --mc SepoliaFork # live TestIMD and TestSIMD; RegistrySepoliaFork: the real Intake v2
 forge fmt --check src test
